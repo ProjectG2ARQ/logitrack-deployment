@@ -1,0 +1,105 @@
+services:
+  # ==========================================
+  # Base de Datos Compartida
+  # ==========================================
+  mysqldb:
+    image: mysql:8.4.0
+    container_name: logitrack-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: shipment_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - logitrack-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # Servidor de Configuración Centralizada
+  # ==========================================
+  configserver:
+    image: mauribz7/configserver:latest
+    container_name: logitrack-configserver
+    restart: on-failure
+    ports:
+      - "8085:8085"
+    networks:
+      - logitrack-net
+
+  # ==========================================
+  # Microservicio de Seguridad y Autenticación
+  # ==========================================
+  security-service:
+    image: mauribz7/security-service:latest
+    container_name: logitrack-security
+    restart: on-failure
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+      configserver:
+        condition: service_started
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://configserver:8085/"
+      SPRING_PROFILES_ACTIVE: "dev"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysqldb:3306/security_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true"
+    ports:
+      - "8082:8082"
+    networks:
+      - logitrack-net
+
+  # ==========================================
+  # Microservicio Courier (Repartidores)
+  # ==========================================
+  courier-service:
+    image: mauribz7/courier-service:latest
+    container_name: logitrack-courier
+    restart: on-failure
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+      configserver:
+        condition: service_started
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://configserver:8085/"
+      SPRING_PROFILES_ACTIVE: "dev"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysqldb:3306/courier_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true"
+    ports:
+      - "8081:8081"
+    networks:
+      - logitrack-net
+
+  # ==========================================
+  # Microservicio Shipment (Envíos)
+  # ==========================================
+  shipment-service:
+    image: mauribz7/shipment-service:latest
+    container_name: logitrack-shipment
+    restart: on-failure
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+      configserver:
+        condition: service_started
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://configserver:8085/"
+      SPRING_PROFILES_ACTIVE: "dev"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysqldb:3306/shipment_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true"
+      APP_COURIER_SERVICE_URL: "http://courier-service:8081"
+    ports:
+      - "8080:8080"
+    networks:
+      - logitrack-net
+
+networks:
+  logitrack-net:
+    driver: bridge
+
+volumes:
+  mysql_data:
