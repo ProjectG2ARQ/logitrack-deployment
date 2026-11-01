@@ -22,7 +22,7 @@ services:
       retries: 5
 
   # ==========================================
-  # Servidor de Configuración Centralizada
+  # 1. Servidor de Configuración
   # ==========================================
   configserver:
     image: mauribz7/configserver:latest
@@ -34,7 +34,25 @@ services:
       - logitrack-net
 
   # ==========================================
-  # Microservicio de Seguridad y Autenticación
+  # 2. Servidor de Descubrimiento (Eureka)
+  # ==========================================
+  eureka-server:
+    image: mauribz7/eureka-server:latest
+    container_name: logitrack-eurekaserver
+    restart: on-failure
+    depends_on:
+      configserver:
+        condition: service_started
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://configserver:8085/"
+      SPRING_PROFILES_ACTIVE: "dev"
+    ports:
+      - "8065:8065"
+    networks:
+      - logitrack-net
+
+  # ==========================================
+  # 3. Microservicios de Dominio
   # ==========================================
   security-service:
     image: mauribz7/security-service:latest
@@ -45,18 +63,18 @@ services:
         condition: service_healthy
       configserver:
         condition: service_started
+      eureka-server:
+        condition: service_started
     environment:
       SPRING_CONFIG_IMPORT: "optional:configserver:http://configserver:8085/"
       SPRING_PROFILES_ACTIVE: "dev"
       SPRING_DATASOURCE_URL: "jdbc:mysql://mysqldb:3306/security_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://eureka-server:8065/eureka/"
     ports:
       - "8082:8082"
     networks:
       - logitrack-net
 
-  # ==========================================
-  # Microservicio Courier (Repartidores)
-  # ==========================================
   courier-service:
     image: mauribz7/courier-service:latest
     container_name: logitrack-courier
@@ -66,18 +84,18 @@ services:
         condition: service_healthy
       configserver:
         condition: service_started
+      eureka-server:
+        condition: service_started
     environment:
       SPRING_CONFIG_IMPORT: "optional:configserver:http://configserver:8085/"
       SPRING_PROFILES_ACTIVE: "dev"
       SPRING_DATASOURCE_URL: "jdbc:mysql://mysqldb:3306/courier_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://eureka-server:8065/eureka/"
     ports:
       - "8081:8081"
     networks:
       - logitrack-net
 
-  # ==========================================
-  # Microservicio Shipment (Envíos)
-  # ==========================================
   shipment-service:
     image: mauribz7/shipment-service:latest
     container_name: logitrack-shipment
@@ -87,13 +105,37 @@ services:
         condition: service_healthy
       configserver:
         condition: service_started
+      eureka-server:
+        condition: service_started
     environment:
       SPRING_CONFIG_IMPORT: "optional:configserver:http://configserver:8085/"
       SPRING_PROFILES_ACTIVE: "dev"
       SPRING_DATASOURCE_URL: "jdbc:mysql://mysqldb:3306/shipment_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true"
-      APP_COURIER_SERVICE_URL: "http://courier-service:8081"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://eureka-server:8065/eureka/"
     ports:
       - "8080:8080"
+    networks:
+      - logitrack-net
+
+  # ==========================================
+  # 4. Puerta de Enlace (API Gateway)
+  # ==========================================
+  api-gateway:
+    image: mauribz7/api-gateway:latest
+    container_name: logitrack-gateway
+    restart: on-failure
+    depends_on:
+      configserver:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://configserver:8085/"
+      SPRING_PROFILES_ACTIVE: "dev"
+      EUREKA_SERVER_URL: "http://eureka-server:8065/eureka/"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://eureka-server:8065/eureka/"
+    ports:
+      - "8066:8066"
     networks:
       - logitrack-net
 
