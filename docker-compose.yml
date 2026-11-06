@@ -139,6 +139,20 @@ services:
     networks:
       - logitrack-net
 
+  # ==========================================
+  # 5. Capa de Presentación (Frontend SPA)
+  # ==========================================
+  logitrack-frontend:
+    image: mauribz7/logitrack-frontend:latest
+    container_name: logitrack-frontend
+    restart: on-failure
+    ports:
+      - "4200:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - logitrack-net
+
 networks:
   logitrack-net:
     driver: bridge
